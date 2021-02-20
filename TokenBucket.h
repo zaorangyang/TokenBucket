@@ -29,8 +29,14 @@ class TokenBucket {
 public:
   TokenBucket() {}
 
+  /*
+   * rate: qps
+   * burstSize: 令牌桶大小
+   */
   TokenBucket(const uint64_t rate, const uint64_t burstSize) {
+    /* timePerToken_表示放置一个令牌需要多少微妙 */
     timePerToken_ = 1000000 / rate;
+    /* 将令牌桶装满需要多上时间 */
     timePerBurst_ = burstSize * timePerToken_;
   }
 
@@ -52,14 +58,26 @@ public:
             .count();
     const uint64_t timeNeeded =
         tokens * timePerToken_.load(std::memory_order_relaxed);
-    const uint64_t minTime =
-        now - timePerBurst_.load(std::memory_order_relaxed);
+
+    /*
+     * oldTime表示上次令牌桶为空的时刻
+     * 随着消费的进行，令牌桶为空的时刻沿着时间流逝的方向移动
+     */
     uint64_t oldTime = time_.load(std::memory_order_relaxed);
     uint64_t newTime = oldTime;
 
+    /* 在minTime时刻之前开始，一定可以将令牌桶装满 */
+    const uint64_t minTime =
+        now - timePerBurst_.load(std::memory_order_relaxed);
+    /*
+     * 注意这里：既然从minTime这里开始就一定可以将令牌桶装满，那么如果 
+     * oldTime比minTime更早，则令牌桶一定是满的，此时将newTime设置为
+     * minTime
+     */
     if (minTime > oldTime) {
       newTime = minTime;
     }
+
 
     for (;;) {
       newTime += timeNeeded;
@@ -78,6 +96,7 @@ public:
   }
 
 private:
+  /* time_表示令牌桶为空的时刻 */
   std::atomic<uint64_t> time_ = {0};
   std::atomic<uint64_t> timePerToken_ = {0};
   std::atomic<uint64_t> timePerBurst_ = {0};
