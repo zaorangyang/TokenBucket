@@ -22,6 +22,7 @@ SOFTWARE.
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 
@@ -30,7 +31,11 @@ public:
   TokenBucket() {}
 
   TokenBucket(const uint64_t rate, const uint64_t burstSize) {
+    // 间隔多少微秒，往令牌桶放入一个token
     timePerToken_ = 1000000 / rate;
+    // burst的概念未知，但是从这里的计算方式可以猜到，burstSize表示一批令牌桶的size
+    // burstSize表示桶的容量，即表示可以装下多少令牌
+    // timePerBurst_表示将burstSize个令牌放入令牌桶需要多少时间
     timePerBurst_ = burstSize * timePerToken_;
   }
 
@@ -50,17 +55,20 @@ public:
         std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::steady_clock::now().time_since_epoch())
             .count();
-    const uint64_t timeNeeded =
-        tokens * timePerToken_.load(std::memory_order_relaxed);
+    /*
+     * minTime：令牌桶的下边界 
+     */
     const uint64_t minTime =
         now - timePerBurst_.load(std::memory_order_relaxed);
     uint64_t oldTime = time_.load(std::memory_order_relaxed);
-    uint64_t newTime = oldTime;
 
-    if (minTime > oldTime) {
-      newTime = minTime;
-    }
+    /*
+     * 初始化newTime 
+     */
+    uint64_t newTime = std::max(minTime, oldTime);
 
+    const uint64_t timeNeeded =
+    tokens * timePerToken_.load(std::memory_order_relaxed);
     for (;;) {
       newTime += timeNeeded;
       if (newTime > now) {
