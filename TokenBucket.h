@@ -61,7 +61,6 @@ public:
     const uint64_t minTime =
         now - timePerBurst_.load(std::memory_order_relaxed);
     uint64_t oldTime = time_.load(std::memory_order_relaxed);
-
     /*
      * 初始化newTime 
      */
@@ -86,6 +85,9 @@ public:
   }
 
 private:
+  /*
+   * time_表示当前令牌桶推进的进度 
+   */
   std::atomic<uint64_t> time_ = {0};
   std::atomic<uint64_t> timePerToken_ = {0};
   std::atomic<uint64_t> timePerBurst_ = {0};
